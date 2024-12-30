@@ -1,8 +1,9 @@
 import ballerina/io;
 import ballerina/time;
 import ballerinax/googleapis.calendar;
+import ballerinax/googleapis.docs;
 
-// Configurable values for Google Calendar API authentication
+// Configurable values for Google Calendar and Google Docs API authentication
 configurable string CLIENT_ID = ?;
 configurable string CLIENT_SECRET = ?;
 configurable string REFRESH_TOKEN = ?;
@@ -23,9 +24,22 @@ calendar:ConnectionConfig config = {
     }
 };
 
+// Initialize the Google Docs API client configuration
+docs:ConnectionConfig connectionConfig = {
+    auth: {
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        refreshToken: REFRESH_TOKEN,
+        refreshUrl: REFRESH_URL
+    }
+};
+
 public function main() returns error? {
     // Create a new Google Calendar client
     calendar:Client|error calendarClient = check new(config);
+
+    // Create a new Google Docs client
+    docs:Client docsClient = check new(connectionConfig);
 
     // Calculate start and end times for event filtering (24 hours ahead)
     time:Utc startTime = time:utcAddSeconds(time:utcNow(), 86401);
@@ -40,10 +54,11 @@ public function main() returns error? {
         timeMin: timeMin
     };
 
-    // Variable to hold the meeting note file URL
+    // Variables to hold the meeting note file URL and ID
     string meetingNoteFileUrl = "";
+    string meetingNoteFileId = "";
 
-    // Ensure the calendarClient is valid
+    // Ensure the calendar client is valid
     if (calendarClient is calendar:Client) {
         // Log the filter criteria
         io:println("Fetching events with criteria: ", criteria);
@@ -68,6 +83,7 @@ public function main() returns error? {
                         // Check if the MIME type matches the configured value
                         if (mimeType.equalsIgnoreCaseAscii(MIME_TYPE)) {
                             meetingNoteFileUrl = attachment.fileUrl;
+                            meetingNoteFileId = <string>attachment.fileId;
                             io:println("Matching attachment found: ", meetingNoteFileUrl);
                             return; // Exit loop once the desired attachment is found
                         } else {
@@ -93,6 +109,15 @@ public function main() returns error? {
     // Log the URL of the desired meeting note file or indicate it was not found
     if (meetingNoteFileUrl != "") {
         io:println("Meeting note file URL: ", meetingNoteFileUrl);
+
+        // Fetch and log the content of the meeting note file
+        docs:Document|error docResponse = docsClient->getDocument(meetingNoteFileId);
+        if (docResponse is docs:Document) {
+            io:println("Retrieved document content successfully.");
+            io:println("Document Content: ", docResponse.body);
+        } else {
+            io:println("Error: Failed to retrieve document. Error: ", docResponse.toString());
+        }
     } else {
         io:println("No meeting note file URL found.");
     }
